@@ -28,8 +28,14 @@
 
 package gr.gousiosg.javacg.stat;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -46,65 +52,54 @@ import org.apache.bcel.classfile.ClassParser;
  */
 public class JCallGraph {
 
-    public static void main(String[] args) {
+	public static void main(String[] args) {
 
-        Function<ClassParser, ClassVisitor> getClassVisitor =
-                (ClassParser cp) -> {
-                    try {
-                        return new ClassVisitor(cp.parse());
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                };
+		Function<ClassParser, ClassVisitor> getClassVisitor = (ClassParser cp) -> {
+			try {
+				return new ClassVisitor(cp.parse());
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		};
 
-        try {
-            for (String arg : args) {
+		try {
+			for (String arg : args) {
 
-                File f = new File(arg);
+				File f = new File(arg);
 
-                if (!f.exists()) {
-                    System.err.println("Jar file " + arg + " does not exist");
-                }
+				if (!f.exists()) {
+					System.err.println("Jar file " + arg + " does not exist");
+				}
 
-                try (JarFile jar = new JarFile(f)) {
-                    Stream<JarEntry> entries = enumerationAsStream(jar.entries());
+				try (JarFile jar = new JarFile(f)) {
+					Stream<JarEntry> entries = enumerationAsStream(jar.entries());
 
-                    String methodCalls = entries.
-                            flatMap(e -> {
-                                if (e.isDirectory() || !e.getName().endsWith(".class"))
-                                    return (new ArrayList<String>()).stream();
+					String methodCalls = entries.flatMap(e -> {
+						if (e.isDirectory() || !e.getName().endsWith(".class"))
+							return (new ArrayList<String>()).stream();
 
-                                ClassParser cp = new ClassParser(arg, e.getName());
-                                return getClassVisitor.apply(cp).start().methodCalls().stream();
-                            }).
-                            map(s -> s + "\n").
-                            reduce(new StringBuilder(),
-                                    StringBuilder::append,
-                                    StringBuilder::append).toString();
+						ClassParser cp = new ClassParser(arg, e.getName());
+						return getClassVisitor.apply(cp).start().methodCalls().stream();
+					}).map(s -> s + "\n").reduce(new StringBuilder(), StringBuilder::append, StringBuilder::append)
+							.toString();
+					System.out.println(methodCalls);
+				}
+			}
+		} catch (IOException e) {
+			System.err.println("Error while processing jar: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
 
-                    BufferedWriter log = new BufferedWriter(new OutputStreamWriter(System.out));
-                    log.write(methodCalls);
-                    log.close();
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("Error while processing jar: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
+	public static <T> Stream<T> enumerationAsStream(Enumeration<T> e) {
+		return StreamSupport.stream(Spliterators.spliteratorUnknownSize(new Iterator<T>() {
+			public T next() {
+				return e.nextElement();
+			}
 
-    public static <T> Stream<T> enumerationAsStream(Enumeration<T> e) {
-        return StreamSupport.stream(
-                Spliterators.spliteratorUnknownSize(
-                        new Iterator<T>() {
-                            public T next() {
-                                return e.nextElement();
-                            }
-
-                            public boolean hasNext() {
-                                return e.hasMoreElements();
-                            }
-                        },
-                        Spliterator.ORDERED), false);
-    }
+			public boolean hasNext() {
+				return e.hasMoreElements();
+			}
+		}, Spliterator.ORDERED), false);
+	}
 }
